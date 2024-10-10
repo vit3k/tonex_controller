@@ -1,0 +1,12 @@
+{
+    "idf.port": "/dev/tty.wchusbserial578E0060461",
+    "idf.flashType": "UART",
+    "files.associations": {
+        "__locale": "c",
+        "string": "c",
+        "string_view": "c",
+        "task.h": "c",
+        "stdio.h": "c"
+    },
+    "idf.adapterTargetName": "esp32s3"
+}
