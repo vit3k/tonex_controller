@@ -1,25 +1,39 @@
 #include "tonex.h"
 #include <iostream>
 #include "hdlc.h"
+#include "usb.h"
+#include <freertos/semphr.h>
+
+static const uint16_t TONEX_ONE_USB_DEVICE_VID = 0x1963;
+static const uint16_t TONEX_ONE_USB_DEVICE_PID = 0x00d1;
 
 void Tonex::handleMessage(std::vector<uint8_t> raw) {
     auto [status, state] = parse(raw);
     if (status == Status::OK && state.header.type == Type::StateChanged) {
+        xSemaphoreTake(semaphore, 1000);
         this->state = static_cast<State>(state);
+        xSemaphoreGive(semaphore);
     }
+}
+
+void Tonex::init()
+{
+    semaphore = xSemaphoreCreateBinary();
+    usb = USB::init(TONEX_ONE_USB_DEVICE_VID, TONEX_ONE_USB_DEVICE_PID, std::bind(&Tonex::handleMessage, this, std::placeholders::_1));
 }
 
 void Tonex::setSlot(Slot newSlot)
 {
-    state.currentSlot = newSlot;
-    std::vector<uint8_t> raw(state.raw.begin(), state.raw.end());
-    uint16_t size = raw.size() & 0xFFFF;
+    uint16_t size = state.raw.size() & 0xFFFF;
     std::cout << "Size: " << (size & 0xFF) << " " << ((size >> 8) & 0xFF) << std::endl;
     std::vector<uint8_t> message = {0xb9, 0x03, 0x81, 0x06, 0x03, 0x82, static_cast<uint8_t>(size & 0xFF), static_cast<uint8_t>((size >> 8) & 0xFF), 0x80, 0x0b, 0x03};
-
+    xSemaphoreTake(semaphore, 1000);
+    state.currentSlot = newSlot;
+    std::vector<uint8_t> raw(state.raw.begin(), state.raw.end());
     state.raw[state.raw.size() - 5] = static_cast<uint8_t>(newSlot);
     message.insert(message.end(), raw.begin(), raw.end());
-    // Send message to tonex
+    xSemaphoreGive(semaphore);
+    usb->send(message);
 }
 
 uint16_t Tonex::parseValue(const std::vector<uint8_t> &message, size_t &index)

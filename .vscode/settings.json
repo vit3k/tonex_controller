@@ -79,7 +79,8 @@
         "__split_buffer": "cpp",
         "__verbose_abort": "cpp",
         "ios": "cpp",
-        "__hash_table": "cpp"
+        "__hash_table": "cpp",
+        "__config": "cpp"
     },
     "idf.adapterTargetName": "esp32s3"
 }

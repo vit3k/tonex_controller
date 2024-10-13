@@ -18,7 +18,7 @@ static const uart_port_t UART_PORT_NUM = UART_NUM_1;
 static const uint8_t MIDI_CHANNEL = 3;
 static const int BUF_SIZE = 1024;
 
-std::optional<ProgramChange> parseProgramChange(const uint8_t *buffer, size_t bufferSize)
+static std::optional<ProgramChange> parseProgramChange(const uint8_t *buffer, size_t bufferSize)
 {
     for (size_t i = 0; i < bufferSize; ++i)
     {
@@ -57,6 +57,7 @@ std::optional<ProgramChange> parseProgramChange(const uint8_t *buffer, size_t bu
 
 void midi_receiver(void *arg)
 {
+    auto tonex = static_cast<Tonex*>(arg);
     /* Configure parameters of an UART driver,
      * communication pins and install the driver */
     uart_config_t uart_config = {
@@ -84,7 +85,7 @@ void midi_receiver(void *arg)
             if (programChange && programChange->channel == MIDI_CHANNEL)
             {
                 auto slotNumber = programChange->programNumber == 0 ? Slot::B : Slot::A;
-                //tonex.setSlot(slotNumber);
+                tonex->setSlot(slotNumber);
             }
         }
     }
