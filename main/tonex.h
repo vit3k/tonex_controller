@@ -62,11 +62,11 @@ private:
     void processBuffer();
     bool initialized;
     void onConnection();
+    void requestState();
+    void hello();
     
 public:
     void setSlot(Slot slot);
     void handleMessage(std::vector<uint8_t> raw);
     void init();
-    void requestState();
-    void hello();
 };
