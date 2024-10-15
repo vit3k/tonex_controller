@@ -2,12 +2,11 @@
 
 #include "esp_log.h"
 #include <vector>
+#include <numeric>
 
 static SemaphoreHandle_t device_disconnected_sem;
 
-
-
-static const char *TAG = "TONEX_CONTROLLER";
+static const char *TAG = "TONEX_CONTROLLER_USB";
 /**
  * @brief Device event callback
  *
@@ -18,7 +17,7 @@ static const char *TAG = "TONEX_CONTROLLER";
  */
 void USB::handle_event(const cdc_acm_host_dev_event_data_t *event, void *arg)
 {
-    auto usb = static_cast<USB*>(arg);
+    // auto usb = static_cast<USB*>(arg);
     switch (event->type)
     {
     case CDC_ACM_HOST_ERROR:
@@ -27,7 +26,6 @@ void USB::handle_event(const cdc_acm_host_dev_event_data_t *event, void *arg)
     case CDC_ACM_HOST_DEVICE_DISCONNECTED:
         ESP_LOGI(TAG, "Device suddenly disconnected");
         ESP_ERROR_CHECK(cdc_acm_host_close(event->data.cdc_hdl));
-        usb->connected = false;
         xSemaphoreGive(device_disconnected_sem);
         break;
     case CDC_ACM_HOST_SERIAL_STATE:
@@ -66,7 +64,7 @@ static void usb_lib_task(void *arg)
 
 bool USB::handle_rx(const uint8_t *data, size_t data_len, void *arg)
 {
-    auto usb = static_cast<USB*>(arg);
+    auto usb = static_cast<USB *>(arg);
     ESP_LOGI(TAG, "Data received");
     ESP_LOG_BUFFER_HEXDUMP(TAG, data, data_len, ESP_LOG_INFO);
     std::vector<uint8_t> message(data, data + data_len);
@@ -74,9 +72,9 @@ bool USB::handle_rx(const uint8_t *data, size_t data_len, void *arg)
     return true;
 }
 
-void USB::usb_host_task(void* arg)
+void USB::usb_host_task(void *arg)
 {
-    auto usb = static_cast<USB*>(arg);
+    auto usb = static_cast<USB *>(arg);
     device_disconnected_sem = xSemaphoreCreateBinary();
     assert(device_disconnected_sem);
 
@@ -97,14 +95,15 @@ void USB::usb_host_task(void* arg)
 
     const cdc_acm_host_device_config_t dev_config = {
         .connection_timeout_ms = 1000,
-        .out_buffer_size = 512,
-        .in_buffer_size = 512,
+        .out_buffer_size = 1024,
+        .in_buffer_size = 1024,
         .event_cb = USB::handle_event,
         .data_cb = USB::handle_rx,
         .user_arg = usb};
 
     while (true)
     {
+        usb->connected = false;
         usb->cdc_dev = NULL;
 
         // Open USB device from tusb_serial_device example example. Either single or dual port configuration.
@@ -117,21 +116,37 @@ void USB::usb_host_task(void* arg)
         }
         cdc_acm_host_desc_print(usb->cdc_dev);
         vTaskDelay(pdMS_TO_TICKS(100));
+        cdc_acm_line_coding_t line_coding;
+        line_coding.dwDTERate = 9600;
+        line_coding.bDataBits = 8;
+        line_coding.bParityType = 0;
+        line_coding.bCharFormat = 1;
+        ESP_ERROR_CHECK(cdc_acm_host_line_coding_set(usb->cdc_dev, &line_coding));
+
+        ESP_ERROR_CHECK(cdc_acm_host_set_control_line_state(usb->cdc_dev, true, false));
         usb->connected = true;
+        ESP_LOGI(TAG, "Connected");
+        // fill vector 0x00 to 0xFF
+        std::vector<uint8_t> data(1024);
+        std::iota(data.begin(), data.end(), 0);
+        // Send data to the device
+        ESP_LOGI(TAG, "Sending data");
+        usb->send(data);
         xSemaphoreTake(device_disconnected_sem, portMAX_DELAY);
     }
 }
 
-void USB::send(const std::vector<uint8_t>& data)
+void USB::send(const std::vector<uint8_t> &data)
 {
-    if (!connected) {
+    if (!connected)
+    {
         return;
     }
     ESP_ERROR_CHECK(cdc_acm_host_data_tx_blocking(cdc_dev, data.data(), data.size(), 20));
     vTaskDelay(pdMS_TO_TICKS(100));
 }
 
-std::unique_ptr<USB> USB::init(uint16_t vid, uint16_t pid, std::function<void(const std::vector<uint8_t>&)> onMessageCallback)
+std::unique_ptr<USB> USB::init(uint16_t vid, uint16_t pid, std::function<void(const std::vector<uint8_t> &)> onMessageCallback)
 {
     auto usb = new USB();
     usb->pid = pid;

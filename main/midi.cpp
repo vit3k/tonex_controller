@@ -17,6 +17,7 @@
 static const uart_port_t UART_PORT_NUM = UART_NUM_1;
 static const uint8_t MIDI_CHANNEL = 3;
 static const int BUF_SIZE = 1024;
+static const char* TAG = "TONEX_CONTROLLER_MIDI";
 
 static std::optional<ProgramChange> parseProgramChange(const uint8_t *buffer, size_t bufferSize)
 {
@@ -33,21 +34,21 @@ static std::optional<ProgramChange> parseProgramChange(const uint8_t *buffer, si
             {
                 uint8_t programNumber = buffer[i + 1];
                 // Print the parsed information
-                printf("Program Change detected:\n");
-                printf("  Channel: %d\n", channel + 1);
-                printf("  Program Number: %d\n", programNumber);
+                ESP_LOGI(TAG, "Program Change detected:\n");
+                ESP_LOGI(TAG, "  Channel: %d\n", channel + 1);
+                ESP_LOGI(TAG, "  Program Number: %d\n", programNumber);
 
                 // Print raw message as hexadecimal string
-                printf("  Raw message: ");
-                // printHexString(&buffer[i], 2); // Print status byte and data byte
+                ESP_LOGI(TAG, "  Raw message: ");
+                ESP_LOG_BUFFER_HEXDUMP(TAG, buffer, bufferSize, ESP_LOG_INFO);
                 return std::optional<ProgramChange>{{channel, programNumber}};
                 // Skip the data byte
                 //++i;
             }
             else
             {
-                printf("Warning: Incomplete Program Change message at end of buffer\n");
-                printf("  Raw message: ");
+                ESP_LOGI(TAG, "Warning: Incomplete Program Change message at end of buffer\n");
+                ESP_LOGI(TAG, "  Raw message: ");
                 // printHexString(&buffer[i], 1); // Print only the status byte
             }
         }
@@ -84,7 +85,7 @@ void midi_receiver(void *arg)
             auto programChange = parseProgramChange(data, len);
             if (programChange && programChange->channel == MIDI_CHANNEL)
             {
-                auto slotNumber = programChange->programNumber == 0 ? Slot::B : Slot::A;
+                auto slotNumber = programChange->programNumber == 1 ? Slot::B : Slot::A;
                 tonex->setSlot(slotNumber);
             }
         }
