@@ -13,7 +13,8 @@ enum Status {
 };
 enum Type {
     Unknown,
-    StateUpdate
+    StateUpdate,
+    Hello
 };
 enum Slot
 {
@@ -39,22 +40,33 @@ struct State : public Message
     std::vector<uint8_t> raw;
 };
 
-
+enum ConnectionState {
+    Disconnected,
+    Connected,
+    Helloed,
+    StateInitialized
+};
 class Tonex
 {
 private:
+    ConnectionState connectionState = ConnectionState::Disconnected;
     SemaphoreHandle_t semaphore;
     std::unique_ptr<USB> usb; 
     State state;
     uint16_t parseValue(const std::vector<uint8_t> &message, size_t &index);
-    std::tuple<Status, Message> parse(const std::vector<uint8_t> &message);
+    std::tuple<Status, Message*> parse(const std::vector<uint8_t> &message);
+    std::tuple<Status, State*> parseState(const std::vector<uint8_t> &unframed, size_t &index);
     std::vector<uint8_t> buffer;
     std::chrono::steady_clock::time_point lastByteTime;
     const std::chrono::milliseconds messageTimeout{1000}; 
     void processBuffer();
+    bool initialized;
+    void onConnection();
+    
 public:
     void setSlot(Slot slot);
     void handleMessage(std::vector<uint8_t> raw);
     void init();
     void requestState();
+    void hello();
 };

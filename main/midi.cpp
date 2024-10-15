@@ -16,12 +16,12 @@
 
 static const uart_port_t UART_PORT_NUM = UART_NUM_1;
 static const uint8_t MIDI_CHANNEL = 3;
-static const int BUF_SIZE = 1024;
+static const int BUF_SIZE = 128;
 static const char* TAG = "TONEX_CONTROLLER_MIDI";
 
 static std::optional<ProgramChange> parseProgramChange(const uint8_t *buffer, size_t bufferSize)
 {
-    for (size_t i = 0; i < bufferSize; ++i)
+    for (size_t i = 0; i < bufferSize; i++)
     {
         // Check if this byte is a status byte for Program Change
         if ((buffer[i] & 0xF0) == 0xC0)
@@ -33,23 +33,12 @@ static std::optional<ProgramChange> parseProgramChange(const uint8_t *buffer, si
             if (i + 1 < bufferSize)
             {
                 uint8_t programNumber = buffer[i + 1];
-                // Print the parsed information
-                ESP_LOGI(TAG, "Program Change detected:\n");
-                ESP_LOGI(TAG, "  Channel: %d\n", channel + 1);
-                ESP_LOGI(TAG, "  Program Number: %d\n", programNumber);
-
-                // Print raw message as hexadecimal string
-                ESP_LOGI(TAG, "  Raw message: ");
-                ESP_LOG_BUFFER_HEXDUMP(TAG, buffer, bufferSize, ESP_LOG_INFO);
+                ESP_LOGI(TAG, "Received program change [channel: %d, program: %d]", channel, programNumber);
                 return std::optional<ProgramChange>{{channel, programNumber}};
-                // Skip the data byte
-                //++i;
             }
             else
             {
                 ESP_LOGI(TAG, "Warning: Incomplete Program Change message at end of buffer\n");
-                ESP_LOGI(TAG, "  Raw message: ");
-                // printHexString(&buffer[i], 1); // Print only the status byte
             }
         }
     }
@@ -75,19 +64,23 @@ void midi_receiver(void *arg)
     ESP_ERROR_CHECK(uart_param_config(UART_PORT_NUM, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(UART_PORT_NUM, 4, 5, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
-    uint8_t *data = (uint8_t *)malloc(BUF_SIZE);
+    auto data = new uint8_t[BUF_SIZE];
 
     while (1)
     {
-        int len = uart_read_bytes(UART_PORT_NUM, data, (BUF_SIZE - 1), 20 / portTICK_PERIOD_MS);
+        int len = uart_read_bytes(UART_PORT_NUM, data, (BUF_SIZE - 1), pdMS_TO_TICKS(20));
         if (len)
         {
+            ESP_LOGI(TAG, "Received %d bytes from UART", len);
             auto programChange = parseProgramChange(data, len);
+            
             if (programChange && programChange->channel == MIDI_CHANNEL)
             {
                 auto slotNumber = programChange->programNumber == 1 ? Slot::B : Slot::A;
                 tonex->setSlot(slotNumber);
             }
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
     }
+    delete data;
 }

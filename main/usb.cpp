@@ -66,7 +66,7 @@ bool USB::handle_rx(const uint8_t *data, size_t data_len, void *arg)
 {
     auto usb = static_cast<USB *>(arg);
     ESP_LOGI(TAG, "Data received");
-    ESP_LOG_BUFFER_HEXDUMP(TAG, data, data_len, ESP_LOG_INFO);
+    // ESP_LOG_BUFFER_HEXDUMP(TAG, data, data_len, ESP_LOG_INFO);
     std::vector<uint8_t> message(data, data + data_len);
     usb->onMessageCallback(message);
     return true;
@@ -114,7 +114,7 @@ void USB::usb_host_task(void *arg)
             ESP_LOGI(TAG, "Failed to open device");
             continue;
         }
-        cdc_acm_host_desc_print(usb->cdc_dev);
+        //cdc_acm_host_desc_print(usb->cdc_dev);
         vTaskDelay(pdMS_TO_TICKS(100));
         cdc_acm_line_coding_t line_coding;
         line_coding.dwDTERate = 9600;
@@ -125,13 +125,8 @@ void USB::usb_host_task(void *arg)
 
         ESP_ERROR_CHECK(cdc_acm_host_set_control_line_state(usb->cdc_dev, true, false));
         usb->connected = true;
+        usb->onConnectionCallback();
         ESP_LOGI(TAG, "Connected");
-        // fill vector 0x00 to 0xFF
-        std::vector<uint8_t> data(1024);
-        std::iota(data.begin(), data.end(), 0);
-        // Send data to the device
-        ESP_LOGI(TAG, "Sending data");
-        usb->send(data);
         xSemaphoreTake(device_disconnected_sem, portMAX_DELAY);
     }
 }
@@ -142,8 +137,16 @@ void USB::send(const std::vector<uint8_t> &data)
     {
         return;
     }
-    ESP_ERROR_CHECK(cdc_acm_host_data_tx_blocking(cdc_dev, data.data(), data.size(), 20));
+    // ESP_LOGI(TAG, "Sending data to usb device");
+    // ESP_LOG_BUFFER_HEXDUMP(TAG, data.data(), data.size(), ESP_LOG_INFO);
+    ESP_ERROR_CHECK(cdc_acm_host_data_tx_blocking(cdc_dev, data.data(), data.size(), portMAX_DELAY));
+    // ESP_LOGI(TAG, "Data sent to usb device");
     vTaskDelay(pdMS_TO_TICKS(100));
+}
+
+void USB::setConnectionCallback(std::function<void(void)> callback)
+{
+    onConnectionCallback = callback;
 }
 
 std::unique_ptr<USB> USB::init(uint16_t vid, uint16_t pid, std::function<void(const std::vector<uint8_t> &)> onMessageCallback)
@@ -152,6 +155,6 @@ std::unique_ptr<USB> USB::init(uint16_t vid, uint16_t pid, std::function<void(co
     usb->pid = pid;
     usb->vid = vid;
     usb->onMessageCallback = onMessageCallback;
-    xTaskCreate(USB::usb_host_task, "usb_host_task", 4096, usb, 5, NULL);
+    xTaskCreatePinnedToCore(USB::usb_host_task, "usb_host_task", 4096, usb, 5, NULL, 0);
     return std::unique_ptr<USB>(usb);
 }
