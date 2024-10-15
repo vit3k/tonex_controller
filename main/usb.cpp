@@ -66,7 +66,6 @@ bool USB::handle_rx(const uint8_t *data, size_t data_len, void *arg)
 {
     auto usb = static_cast<USB *>(arg);
     ESP_LOGI(TAG, "Data received");
-    // ESP_LOG_BUFFER_HEXDUMP(TAG, data, data_len, ESP_LOG_INFO);
     std::vector<uint8_t> message(data, data + data_len);
     usb->onMessageCallback(message);
     return true;
@@ -114,7 +113,6 @@ void USB::usb_host_task(void *arg)
             ESP_LOGI(TAG, "Failed to open device");
             continue;
         }
-        //cdc_acm_host_desc_print(usb->cdc_dev);
         vTaskDelay(pdMS_TO_TICKS(100));
         cdc_acm_line_coding_t line_coding;
         line_coding.dwDTERate = 9600;
@@ -137,10 +135,7 @@ void USB::send(const std::vector<uint8_t> &data)
     {
         return;
     }
-    // ESP_LOGI(TAG, "Sending data to usb device");
-    // ESP_LOG_BUFFER_HEXDUMP(TAG, data.data(), data.size(), ESP_LOG_INFO);
     ESP_ERROR_CHECK(cdc_acm_host_data_tx_blocking(cdc_dev, data.data(), data.size(), portMAX_DELAY));
-    // ESP_LOGI(TAG, "Data sent to usb device");
     vTaskDelay(pdMS_TO_TICKS(100));
 }
 

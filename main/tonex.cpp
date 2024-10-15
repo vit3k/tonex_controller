@@ -86,7 +86,6 @@ void Tonex::onConnection()
         vTaskDelay(pdMS_TO_TICKS(100));
     }
     ESP_LOGI(TAG, "Initialized");
-    //setSlot(Slot::A);
 }
 
 std::tuple<Status, State *> Tonex::parseState(const std::vector<uint8_t> &unframed, size_t &index)
@@ -114,10 +113,6 @@ void Tonex::init()
     xSemaphoreGive(semaphore);
     usb = USB::init(TONEX_ONE_USB_DEVICE_VID, TONEX_ONE_USB_DEVICE_PID, std::bind(&Tonex::handleMessage, this, std::placeholders::_1));
     usb->setConnectionCallback(std::bind(&Tonex::onConnection, this));
-    // ESP_LOGI(TAG, "")
-    // requestState();
-    // vTaskDelay(pdMS_TO_TICKS(1000));
-    // setSlot(Slot::A);
 }
 
 void Tonex::requestState()
@@ -146,19 +141,12 @@ void Tonex::setSlot(Slot newSlot)
         return;
     }
     ESP_LOGI(TAG, "Setting slot %d", static_cast<int>(newSlot));
-    // assert(semaphore != nullptr);
     xSemaphoreTake(semaphore, portMAX_DELAY);
-    // ESP_LOGI(TAG, "semaphore acquired");
     uint16_t size = state.raw.size() & 0xFFFF;
-    // ESP_LOGI(TAG, "State size %d", size);
-    // std::cout << "Size: " << (size & 0xFF) << " " << ((size >> 8) & 0xFF) << std::endl;
     std::vector<uint8_t> message = {0xb9, 0x03, 0x81, 0x06, 0x03, 0x82, static_cast<uint8_t>(size & 0xFF), static_cast<uint8_t>((size >> 8) & 0xFF), 0x80, 0x0b, 0x03};
     state.currentSlot = newSlot;
-    // std::vector<uint8_t> raw(state.raw.begin(), state.raw.end());
-    // ESP_LOG_BUFFER_HEXDUMP(TAG, raw.data(), raw.size(), ESP_LOG_INFO);
     state.raw[state.raw.size() - 5] = static_cast<uint8_t>(newSlot);
     message.insert(message.end(), state.raw.begin(), state.raw.end());
-    // ESP_LOG_BUFFER_HEXDUMP(TAG, message.data(), message.size(), ESP_LOG_INFO);
     auto framed = hdlc::addFraming(message);
     xSemaphoreGive(semaphore);
     usb->send(framed);
