@@ -1,8 +1,8 @@
 # TONEX ONE MIDI Adapter
 
 ![License](https://img.shields.io/badge/License-GPLv3-blue.svg)
-![Issues](https://img.shields.io/github/issues/yourusername/tonex-one-midi-adapter)
-![Stars](https://img.shields.io/github/stars/yourusername/tonex-one-midi-adapter)
+![Issues](https://img.shields.io/github/issues/vit3k/tonex_controller)
+![Stars](https://img.shields.io/github/stars/vit3k/tonex_controller)
 
 ## Table of Contents
 - [Overview](#overview)

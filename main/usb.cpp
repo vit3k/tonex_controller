@@ -44,7 +44,6 @@ void USB::usb_host_task(void *arg)
         usb->connected = false;
         usb->cdc_dev = NULL;
 
-        // Open USB device from tusb_serial_device example example. Either single or dual port configuration.
         ESP_LOGI(TAG, "Opening CDC ACM device 0x%04X:0x%04X...", usb->vid, usb->pid);
         esp_err_t err = cdc_acm_host_open(usb->vid, usb->pid, 0, &dev_config, &(usb->cdc_dev));
         if (ESP_OK != err)
