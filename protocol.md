@@ -183,10 +183,8 @@ This approach ensures that the controller doesn't inadvertently change other asp
 
 When implementing communication with the Tonex ONE pedal:
 
-1. Always start with the hello message exchange to establish communication.
+1. Although app sends hello message as first it looks like it is not necessary. But because of my lack of full understanding of the protocol I choosed to send it in Tonex controller anyway.
 2. Use the request state message to get the current full state before making changes.
 3. When changing a specific parameter (like the active slot), modify only that part of the state data.
 4. Send the full state back to the pedal, even if only one parameter has changed.
 5. Be prepared to handle state changed messages from the pedal at any time, as the state can change due to physical interaction with the pedal.
-
-
