@@ -25,7 +25,7 @@ For more information on the HDLC protocol, refer to the [Wikipedia page](https:/
 
 HDLC includes a CRC-CCITT checksum that must be calculated and appended to every message. The CRC is calculated using all bytes between the 0x7E flag bytes.
 
-**Important note:** 0x7D escaping is also applied to CRC.
+**Important note:** byte stuffing is also applied to CRC.
 
 ### Message Structure
 
