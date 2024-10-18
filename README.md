@@ -17,11 +17,13 @@
 
 ## Overview
 
-The TONEX ONE MIDI Adapter is a project that enables MIDI support for the TONEX ONE device. It allows users to change active presets on the TONEX ONE using a USB connection, significantly enhancing its versatility in live performance and studio settings.
+The TONEX ONE Controller is a project that enables MIDI support for the TONEX ONE device. It allows users to change active presets on the TONEX ONE using a USB connection, significantly enhancing its versatility in live performance and studio settings.
 
 ## Disclaimer
 
-This project is an unofficial modification for the TONEX ONE device and is not affiliated with, endorsed by, or supported by IK Multimedia. Use of this project is at your own risk. The author and contributors of this project are not responsible for any damage or issues that may arise from using this project.
+This project is an unofficial "addon" for the TONEX ONE device and is not affiliated with, endorsed by, or supported by IK Multimedia. 
+
+Use of this project is at your own risk. The author and contributors of this project are not responsible for any damage or issues that may arise from using this project.
 
 ## Features
 
