@@ -1,8 +1,6 @@
 # TONEX ONE Controller
 
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
-![Issues](https://img.shields.io/github/issues/vit3k/tonex_controller)
-![Stars](https://img.shields.io/github/stars/vit3k/tonex_controller)
 
 ## Table of Contents
 - [Overview](#overview)
