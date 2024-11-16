@@ -248,6 +248,10 @@ b9 01
         00 [active slot 0 - A, 1 - B, 3 - C]
         81 d1 01 [ a4Reference 0x019f (415 hz) -> 0x01b8 (440 hz) -> 0x01d1 (465 hz) ]
         00 [ direct monitoring 0x00 - off, 0x01 - on ]
+        [ added in 1.2 firmware version ]
+        00 [ tempo source 00 - GLOBAL, 01 - PRESET]
+        88 00 00 70 42 [ tempo in BPM // float32 0x00007042 (60) -> 0x00007043 (240) ]
+        
 ```
 ### Changing the State
 
