@@ -1,4 +1,4 @@
-/* 
+/*
  * MIT License
  *
  * Copyright (c) 2024 vit3k
@@ -85,6 +85,14 @@ namespace midi
                     }
                     auto slotNumber = programChange.programNumber == 1 ? Slot::B : Slot::A;
                     tonex->setSlot(slotNumber);
+                    // if (programChange.programNumber < 20)
+                    // {
+                    //     tonex->switchSilently(programChange.programNumber);
+                    // }
+                    // else 
+                    // {
+                    //     ESP_LOGW(TAG, "Invalid program number: %d", programChange.programNumber);
+                    // }
                 }
                 vTaskDelay(pdMS_TO_TICKS(10));
             }

@@ -90,11 +90,61 @@ void Tonex::setSlot(Slot newSlot)
     uint16_t size = state.raw.size() & 0xFFFF;
     std::vector<uint8_t> message = {0xb9, 0x03, 0x81, 0x06, 0x03, 0x82, static_cast<uint8_t>(size & 0xFF), static_cast<uint8_t>((size >> 8) & 0xFF), 0x80, 0x0b, 0x03};
     state.currentSlot = newSlot;
-    state.raw[state.raw.size() - 5] = static_cast<uint8_t>(newSlot);
+    state.raw[state.raw.size() - 11] = static_cast<uint8_t>(newSlot);
     message.insert(message.end(), state.raw.begin(), state.raw.end());
     auto framed = hdlc::addFraming(message);
     xSemaphoreGive(semaphore);
     usb->send(framed);
+}
+
+void Tonex::changePreset(Slot slot, uint8_t preset)
+{
+    // TODO: update to 1.2.* needed
+    if (connectionState != ConnectionState::StateInitialized) 
+    {
+        ESP_LOGW(TAG, "Tonex connection is not ready");
+        return;
+    }
+    if (preset >= 20)
+    {
+        ESP_LOGW(TAG, "Invalid preset number: %d", preset);
+        return;
+    }
+    ESP_LOGI(TAG, "Changing preset for slot %d to %d", static_cast<int>(slot), preset);
+    xSemaphoreTake(semaphore, portMAX_DELAY);
+    uint16_t size = state.raw.size() & 0xFFFF;
+    std::vector<uint8_t> message = {0xb9, 0x03, 0x81, 0x06, 0x03, 0x82, static_cast<uint8_t>(size & 0xFF), static_cast<uint8_t>((size >> 8) & 0xFF), 0x80, 0x0b, 0x03};
+    switch (slot)
+    {
+    case Slot::A:
+        state.slotAPreset = preset;
+        state.raw[state.raw.size() - 12] = preset;
+        break;
+    case Slot::B:
+        state.slotBPreset = preset;
+        state.raw[state.raw.size() - 10] = preset;
+        break;
+    case Slot::C:
+        state.slotCPreset = preset;
+        state.raw[state.raw.size() - 8] = preset;
+        break;
+    }
+    message.insert(message.end(), state.raw.begin(), state.raw.end());
+    auto framed = hdlc::addFraming(message);
+    xSemaphoreGive(semaphore);
+    usb->send(framed);
+}
+
+Slot Tonex::getCurrentSlot()
+{
+    return state.currentSlot;
+}
+
+void Tonex::switchSilently(uint8_t value)
+{
+    auto notActiveSlot = state.currentSlot == Slot::A ? Slot::B : Slot::A;
+    changePreset(notActiveSlot, value);
+    setSlot(notActiveSlot);
 }
 
 void Tonex::handleMessage(std::vector<uint8_t> raw)
