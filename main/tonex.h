@@ -93,4 +93,7 @@ public:
     void setSlot(Slot slot);
     void handleMessage(std::vector<uint8_t> raw);
     void init();
+    void changePreset(Slot slot, uint8_t value);
+    Slot getCurrentSlot();
+    void switchSilently(uint8_t value);
 };
