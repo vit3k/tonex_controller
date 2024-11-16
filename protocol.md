@@ -304,7 +304,7 @@ c827
 7e
 ```
 
-Tonex ONE responds with a long message that was not yet analized.
+Tonex ONE responds with a long message that was not yet analized (it is a message based on 1.1.4 firmwawe. Probably needs updating to match 1.2.* version with FX). 
 ```
 b9 03 
     81 04 03 
