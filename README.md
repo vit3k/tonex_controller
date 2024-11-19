@@ -56,6 +56,21 @@ The MIDI input circuit can be constructed using the design available at:
 
 **Note:** Basic soldering skills are required for assembling the MIDI input circuit.
 
+### USB Host Support on ESP32-S3 Boards
+
+Some ESP32-S3 boards do not function as USB hosts out of the box, which can lead to errors like this:
+
+```
+I (1378) TONEX_CONTROLLER_USB: Opening CDC ACM device 0x1963:0x00D1...
+I (2378) TONEX_CONTROLLER_USB: Failed to open device
+```
+
+To enable USB host functionality, you may need to solder a jumper on the back of the board. The soldering area will typically resemble this:
+
+<img src="usbhostpad.png" alt="USB Host Pad" width="320"/>
+
+To complete the setup, connect the two small pads shown in the image with solder. This modification bridges the connection required for USB host support.
+
 ## Installation
 
 1. Clone this repository:
