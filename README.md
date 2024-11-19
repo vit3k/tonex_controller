@@ -56,7 +56,7 @@ The MIDI input circuit can be constructed using the design available at:
 
 **Note:** Basic soldering skills are required for assembling the MIDI input circuit.
 
-### USB Host Support on ESP32-S3 Boards
+### USB Host Support on some ESP32-S3 clone boards
 
 Some ESP32-S3 boards do not function as USB hosts out of the box, which can lead to errors like this:
 
