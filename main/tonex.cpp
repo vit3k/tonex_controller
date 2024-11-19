@@ -118,15 +118,15 @@ void Tonex::changePreset(Slot slot, uint8_t preset)
     {
     case Slot::A:
         state.slotAPreset = preset;
-        state.raw[state.raw.size() - 12] = preset;
+        state.raw[state.raw.size() - 18] = preset;
         break;
     case Slot::B:
         state.slotBPreset = preset;
-        state.raw[state.raw.size() - 10] = preset;
+        state.raw[state.raw.size() - 16] = preset;
         break;
     case Slot::C:
         state.slotCPreset = preset;
-        state.raw[state.raw.size() - 8] = preset;
+        state.raw[state.raw.size() - 14] = preset;
         break;
     }
     message.insert(message.end(), state.raw.begin(), state.raw.end());
@@ -138,6 +138,21 @@ void Tonex::changePreset(Slot slot, uint8_t preset)
 Slot Tonex::getCurrentSlot()
 {
     return state.currentSlot;
+}
+
+uint8_t Tonex::getPreset(Slot slot)
+{
+    switch(slot)
+    {
+        case Slot::A:
+            return state.slotAPreset;
+        case Slot::B:
+            return state.slotBPreset;
+        case Slot::C:
+            return state.slotCPreset;
+    }
+
+    return 0;
 }
 
 void Tonex::switchSilently(uint8_t value)
@@ -182,7 +197,7 @@ void Tonex::processBuffer()
             return;
         }
 
-        ESP_LOG_BUFFER_HEX(TAG, buffer.data(), buffer.size());
+        //ESP_LOG_BUFFER_HEX(TAG, buffer.data(), buffer.size());
 
         switch (msg->header.type)
         {
@@ -296,6 +311,7 @@ std::tuple<Status, Message *> Tonex::parse(const std::vector<uint8_t> &message)
 
 std::tuple<Status, State *> Tonex::parseState(const std::vector<uint8_t> &unframed, size_t &index)
 {
+    static const char slotName[] ={'A', 'B', 'C'};
     auto state = new State();
     state->header.type = Type::StateUpdate;
     std::vector<uint8_t> raw(unframed.begin() + index, unframed.end());
@@ -308,7 +324,8 @@ std::tuple<Status, State *> Tonex::parseState(const std::vector<uint8_t> &unfram
     state->slotCPreset = unframed[index];
     index += 3;
     state->currentSlot = static_cast<Slot>(unframed[index]);
-    ESP_LOGI(TAG, "Current slot: %d", static_cast<int>(state->currentSlot));
+    ESP_LOGI(TAG, "Current slot: %c", slotName[static_cast<int>(state->currentSlot)]);
+    ESP_LOGI(TAG, "Presets: A: %d, B: %d, C: %d", state->slotAPreset, state->slotBPreset, state->slotCPreset);
     initialized = true;
     return {Status::OK, state};
 }
