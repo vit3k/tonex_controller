@@ -181,6 +181,9 @@ void Tonex::processBuffer()
             ESP_LOGE(TAG, "Error parsing message: %d", static_cast<int>(status));
             return;
         }
+
+        ESP_LOG_BUFFER_HEX(TAG, buffer.data(), buffer.size());
+
         switch (msg->header.type)
         {
         case Type::StateUpdate:
@@ -297,7 +300,7 @@ std::tuple<Status, State *> Tonex::parseState(const std::vector<uint8_t> &unfram
     state->header.type = Type::StateUpdate;
     std::vector<uint8_t> raw(unframed.begin() + index, unframed.end());
     state->raw = raw;
-    index += raw.size() - 12;
+    index += raw.size() - 18;
     state->slotAPreset = unframed[index];
     index += 2;
     state->slotBPreset = unframed[index];
