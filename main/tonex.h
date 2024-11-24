@@ -95,5 +95,6 @@ public:
     void init();
     void changePreset(Slot slot, uint8_t value);
     Slot getCurrentSlot();
+    uint8_t getPreset(Slot slot);
     void switchSilently(uint8_t value);
 };
