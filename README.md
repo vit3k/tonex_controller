@@ -90,18 +90,6 @@ To complete the setup, connect the two small pads shown in the image with solder
    idf.py set-target esp32s3
    ```
 
-2. Because default FIFO size configuration options for ESP32S3 are not suitable for Tonex One as it has wPacketMaxSize set to 512 for OUT endpoint modification of internals of IDF is needed:
-
-   - Open file: `components/hal/usb_dwc_hal.c`
-   - Locate the `usb_dwc_hal_set_fifo_bias` function
-   - Modify as follows:
-     ```c
-     case USB_HAL_FIFO_BIAS_DEFAULT:
-         fifo_config.nptx_fifo_lines = OTG_DFIFO_DEPTH / 4;
-     ```
-
-> If anyone knows a better solution for this issue please let me know.
-
 ## Build and Flash
 Build the project and flash it to the board:
 ```

@@ -27,6 +27,7 @@
 #include "esp_log.h"
 #include <vector>
 #include <numeric>
+#include <hal/usb_dwc_hal.h>
 
 static void usb_lib_task(void *arg);
 
@@ -45,6 +46,11 @@ void USB::usb_host_task(void *arg)
     const usb_host_config_t host_config = {
         .skip_phy_setup = false,
         .intr_flags = ESP_INTR_FLAG_LEVEL1,
+        .fifo_settings_custom = {
+            .nptx_fifo_lines = 128, // Must be > 0
+            .ptx_fifo_lines = 32,  // Can be 0 if periodic TX endpoints are not used
+            .rx_fifo_lines = 32    // Must be > 0
+        },
     };
     ESP_ERROR_CHECK(usb_host_install(&host_config));
 
