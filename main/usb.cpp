@@ -87,11 +87,27 @@ void USB::usb_host_task(void *arg)
         line_coding.bDataBits = 8;
         line_coding.bParityType = 0;
         line_coding.bCharFormat = 1;
-        ESP_ERROR_CHECK(cdc_acm_host_line_coding_set(usb->cdc_dev, &line_coding));
-
-        ESP_ERROR_CHECK(cdc_acm_host_set_control_line_state(usb->cdc_dev, true, false));
+        err = cdc_acm_host_line_coding_set(usb->cdc_dev, &line_coding);
+        if (ESP_OK == err)
+        {
+            err = cdc_acm_host_set_control_line_state(usb->cdc_dev, true, false);
+        }
+        if (ESP_OK != err)
+        {
+            // Most likely unplugged during setup. Close and retry instead of aborting.
+            ESP_LOGE(TAG, "Failed to configure device: %s", esp_err_to_name(err));
+            cdc_acm_host_close(usb->cdc_dev);
+            usb->cdc_dev = NULL;
+            vTaskDelay(pdMS_TO_TICKS(500));
+            // Drop a disconnect signal that may have raced with the close above
+            xSemaphoreTake(device_disconnected_sem, 0);
+            continue;
+        }
         usb->connected = true;
-        usb->onConnectionCallback();
+        if (usb->onConnectionCallback)
+        {
+            usb->onConnectionCallback();
+        }
         ESP_LOGI(TAG, "Connected");
         xSemaphoreTake(device_disconnected_sem, portMAX_DELAY);
     }
@@ -108,19 +124,31 @@ bool USB::handle_rx(const uint8_t *data, size_t data_len, void *arg)
 }
 
 
-void USB::send(const std::vector<uint8_t> &data)
+esp_err_t USB::send(const std::vector<uint8_t> &data)
 {
     if (!connected)
     {
-        return;
+        return ESP_ERR_INVALID_STATE;
     }
-    ESP_ERROR_CHECK(cdc_acm_host_data_tx_blocking(cdc_dev, data.data(), data.size(), portMAX_DELAY));
+    // Finite timeout and no ESP_ERROR_CHECK: the device may be unplugged mid-send.
+    esp_err_t err = cdc_acm_host_data_tx_blocking(cdc_dev, data.data(), data.size(), 1000); // timeout in ms
+    if (ESP_OK != err)
+    {
+        ESP_LOGE(TAG, "Failed to send data: %s", esp_err_to_name(err));
+        return err;
+    }
     vTaskDelay(pdMS_TO_TICKS(100));
+    return ESP_OK;
 }
 
 void USB::setConnectionCallback(std::function<void(void)> callback)
 {
     onConnectionCallback = callback;
+}
+
+void USB::setDisconnectionCallback(std::function<void(void)> callback)
+{
+    onDisconnectionCallback = callback;
 }
 
 std::unique_ptr<USB> USB::init(uint16_t vid, uint16_t pid, std::function<void(const std::vector<uint8_t> &)> onMessageCallback)
@@ -135,17 +163,28 @@ std::unique_ptr<USB> USB::init(uint16_t vid, uint16_t pid, std::function<void(co
 
 void USB::handle_event(const cdc_acm_host_dev_event_data_t *event, void *arg)
 {
-    // auto usb = static_cast<USB*>(arg);
+    auto usb = static_cast<USB *>(arg);
     switch (event->type)
     {
     case CDC_ACM_HOST_ERROR:
         ESP_LOGE(TAG, "CDC-ACM error has occurred, err_no = %i", event->data.error);
         break;
     case CDC_ACM_HOST_DEVICE_DISCONNECTED:
+    {
         ESP_LOGI(TAG, "Device suddenly disconnected");
-        ESP_ERROR_CHECK(cdc_acm_host_close(event->data.cdc_hdl));
+        usb->connected = false;
+        if (usb->onDisconnectionCallback)
+        {
+            usb->onDisconnectionCallback();
+        }
+        esp_err_t err = cdc_acm_host_close(event->data.cdc_hdl);
+        if (ESP_OK != err)
+        {
+            ESP_LOGE(TAG, "Failed to close device: %s", esp_err_to_name(err));
+        }
         xSemaphoreGive(device_disconnected_sem);
         break;
+    }
     case CDC_ACM_HOST_SERIAL_STATE:
         ESP_LOGI(TAG, "Serial state notif 0x%04X", event->data.serial_state.val);
         break;

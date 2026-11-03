@@ -29,6 +29,7 @@
 #include "usb.h"
 #include <freertos/semphr.h>
 #include <chrono>
+#include <atomic>
 
 enum Status {
     OK,
@@ -73,7 +74,7 @@ enum ConnectionState {
 class Tonex
 {
 private:
-    ConnectionState connectionState = ConnectionState::Disconnected;
+    std::atomic<ConnectionState> connectionState{ConnectionState::Disconnected};
     SemaphoreHandle_t semaphore;
     std::unique_ptr<USB> usb; 
     State state;
@@ -86,6 +87,8 @@ private:
     void processBuffer();
     bool initialized;
     void onConnection();
+    void onDisconnection();
+    bool waitForConnectionState(ConnectionState target, uint32_t timeoutMs);
     void requestState();
     void hello();
     
