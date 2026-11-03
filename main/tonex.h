@@ -25,6 +25,7 @@
 #pragma once 
 #include <cstdint>
 #include <vector>
+#include <memory>
 #include <tuple>
 #include "usb.h"
 #include <freertos/semphr.h>
@@ -54,6 +55,7 @@ struct Header
 };
 struct Message {
     Header header;
+    virtual ~Message() = default;
 };
 struct State : public Message
 {
@@ -77,9 +79,9 @@ private:
     SemaphoreHandle_t semaphore;
     std::unique_ptr<USB> usb; 
     State state;
-    uint16_t parseValue(const std::vector<uint8_t> &message, size_t &index);
-    std::tuple<Status, Message*> parse(const std::vector<uint8_t> &message);
-    std::tuple<Status, State*> parseState(const std::vector<uint8_t> &unframed, size_t &index);
+    bool parseValue(const std::vector<uint8_t> &message, size_t &index, uint16_t &value);
+    std::tuple<Status, std::unique_ptr<Message>> parse(const std::vector<uint8_t> &message);
+    std::tuple<Status, std::unique_ptr<State>> parseState(const std::vector<uint8_t> &unframed, size_t &index);
     std::vector<uint8_t> buffer;
     std::chrono::steady_clock::time_point lastByteTime;
     const std::chrono::milliseconds messageTimeout{1000}; 
