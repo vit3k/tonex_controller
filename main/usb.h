@@ -26,15 +26,18 @@
 
 #include <memory>
 #include <functional>
+#include <atomic>
+#include <vector>
 #include "usb/usb_host.h"
 #include "usb/cdc_acm_host.h"
 
 class USB {
 private:
     cdc_acm_dev_hdl_t cdc_dev = nullptr;
-    bool connected = false;
+    std::atomic<bool> connected{false};
     std::function<void(const std::vector<uint8_t>&)> onMessageCallback;
     std::function<void(void)> onConnectionCallback;
+    std::function<void(void)> onDisconnectionCallback;
     uint16_t vid;
     uint16_t pid;
     USB() = default;
@@ -43,6 +46,8 @@ public:
     static bool handle_rx(const uint8_t *data, size_t data_len, void *arg);
     static void usb_host_task(void* arg);
     static std::unique_ptr<USB> init(uint16_t vid, uint16_t pid, std::function<void(const std::vector<uint8_t>&)> onMessageCallback);
-    void send(const std::vector<uint8_t>& data);
+    esp_err_t send(const std::vector<uint8_t>& data);
+    bool isConnected() const { return connected.load(); }
     void setConnectionCallback(std::function<void(void)> callback);
+    void setDisconnectionCallback(std::function<void(void)> callback);
 };

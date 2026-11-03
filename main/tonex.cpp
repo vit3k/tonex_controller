@@ -33,23 +33,69 @@ static const uint16_t TONEX_ONE_USB_DEVICE_PID = 0x00d1;
 
 static const char *TAG = "TONEX_CONTROLLER_TONEX";
 
+// State payload tail layout (offsets from the end of raw):
+// -18 slot A preset, -16 slot B preset, -14 slot C preset, -11 current slot.
+static const size_t STATE_MIN_SIZE = 18;
+
+static const int HANDSHAKE_ATTEMPTS = 3;
+static const uint32_t HANDSHAKE_TIMEOUT_MS = 2000;
+
+// Polls until connectionState reaches at least `target`. Returns false on timeout or unplug.
+bool Tonex::waitForConnectionState(ConnectionState target, uint32_t timeoutMs)
+{
+    for (uint32_t waited = 0; waited < timeoutMs; waited += 100)
+    {
+        if (!usb->isConnected() || connectionState == ConnectionState::Disconnected)
+        {
+            return false;
+        }
+        if (connectionState >= target)
+        {
+            return true;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    return connectionState >= target;
+}
+
 void Tonex::onConnection()
 {
     ESP_LOGI(TAG, "Connected");
-    connectionState = ConnectionState::Connected;
-    hello();
-    while (connectionState != ConnectionState::Helloed)
+    for (int attempt = 1; attempt <= HANDSHAKE_ATTEMPTS; attempt++)
     {
-        vTaskDelay(pdMS_TO_TICKS(100));
+        if (!usb->isConnected())
+        {
+            break;
+        }
+        connectionState = ConnectionState::Connected;
+        hello();
+        if (!waitForConnectionState(ConnectionState::Helloed, HANDSHAKE_TIMEOUT_MS))
+        {
+            ESP_LOGW(TAG, "Hello timed out (attempt %d/%d)", attempt, HANDSHAKE_ATTEMPTS);
+            continue;
+        }
+        ESP_LOGI(TAG, "Helloed");
+        requestState();
+        if (!waitForConnectionState(ConnectionState::StateInitialized, HANDSHAKE_TIMEOUT_MS))
+        {
+            ESP_LOGW(TAG, "State request timed out (attempt %d/%d)", attempt, HANDSHAKE_ATTEMPTS);
+            continue;
+        }
+        ESP_LOGI(TAG, "Initialized");
+        return;
     }
-    ESP_LOGI(TAG, "Helloed");
-    requestState();
-    while (connectionState != ConnectionState::StateInitialized)
+    // Give up; usb_host_task goes back to waiting for the disconnect. A replug retries.
+    ESP_LOGE(TAG, "Handshake failed, pedal not initialized");
+    if (!usb->isConnected())
     {
-        ESP_LOGI(TAG, "State: %d", static_cast<int>(connectionState));
-        vTaskDelay(pdMS_TO_TICKS(100));
+        connectionState = ConnectionState::Disconnected;
     }
-    ESP_LOGI(TAG, "Initialized");
+}
+
+void Tonex::onDisconnection()
+{
+    ESP_LOGI(TAG, "Disconnected");
+    connectionState = ConnectionState::Disconnected;
 }
 
 void Tonex::init()
@@ -58,6 +104,7 @@ void Tonex::init()
     xSemaphoreGive(semaphore);
     usb = USB::init(TONEX_ONE_USB_DEVICE_VID, TONEX_ONE_USB_DEVICE_PID, std::bind(&Tonex::handleMessage, this, std::placeholders::_1));
     usb->setConnectionCallback(std::bind(&Tonex::onConnection, this));
+    usb->setDisconnectionCallback(std::bind(&Tonex::onDisconnection, this));
 }
 
 void Tonex::requestState()
@@ -87,6 +134,12 @@ void Tonex::setSlot(Slot newSlot)
     }
     ESP_LOGI(TAG, "Setting slot %d", static_cast<int>(newSlot));
     xSemaphoreTake(semaphore, portMAX_DELAY);
+    if (state.raw.size() < STATE_MIN_SIZE)
+    {
+        xSemaphoreGive(semaphore);
+        ESP_LOGW(TAG, "State too short to set slot: %u", static_cast<unsigned>(state.raw.size()));
+        return;
+    }
     uint16_t size = state.raw.size() & 0xFFFF;
     std::vector<uint8_t> message = {0xb9, 0x03, 0x81, 0x06, 0x03, 0x82, static_cast<uint8_t>(size & 0xFF), static_cast<uint8_t>((size >> 8) & 0xFF), 0x80, 0x0b, 0x03};
     state.currentSlot = newSlot;
@@ -112,6 +165,12 @@ void Tonex::changePreset(Slot slot, uint8_t preset)
     }
     ESP_LOGI(TAG, "Changing preset for slot %d to %d", static_cast<int>(slot), preset);
     xSemaphoreTake(semaphore, portMAX_DELAY);
+    if (state.raw.size() < STATE_MIN_SIZE)
+    {
+        xSemaphoreGive(semaphore);
+        ESP_LOGW(TAG, "State too short to change preset: %u", static_cast<unsigned>(state.raw.size()));
+        return;
+    }
     uint16_t size = state.raw.size() & 0xFFFF;
     std::vector<uint8_t> message = {0xb9, 0x03, 0x81, 0x06, 0x03, 0x82, static_cast<uint8_t>(size & 0xFF), static_cast<uint8_t>((size >> 8) & 0xFF), 0x80, 0x0b, 0x03};
     switch (slot)
@@ -204,7 +263,7 @@ void Tonex::processBuffer()
         case Type::StateUpdate:
             xSemaphoreTake(semaphore, portMAX_DELAY);
             {
-                this->state = *static_cast<State *>(msg);
+                this->state = *static_cast<State *>(msg.get());
                 ESP_LOGI(TAG, "Received StateUpdate. Current slot: %d", static_cast<int>(this->state.currentSlot));
                 connectionState = ConnectionState::StateInitialized;
             }
@@ -220,14 +279,23 @@ void Tonex::processBuffer()
             ESP_LOGI(TAG, "Message unknown");
             break;
         }
-        delete msg;
     }
     buffer.clear();
 }
 
-uint16_t Tonex::parseValue(const std::vector<uint8_t> &message, size_t &index)
+bool Tonex::parseValue(const std::vector<uint8_t> &message, size_t &index, uint16_t &value)
 {
-    uint16_t value = 0;
+    if (index >= message.size())
+    {
+        ESP_LOGW(TAG, "parseValue: index %u out of range (size %u)", static_cast<unsigned>(index), static_cast<unsigned>(message.size()));
+        return false;
+    }
+    size_t needed = (message[index] == 0x81 || message[index] == 0x82) ? 3 : (message[index] == 0x80 ? 2 : 1);
+    if (message.size() - index < needed)
+    {
+        ESP_LOGW(TAG, "parseValue: truncated value at index %u (size %u)", static_cast<unsigned>(index), static_cast<unsigned>(message.size()));
+        return false;
+    }
     if (message[index] == 0x81 || message[index] == 0x82)
     {
         value = (message[index + 2] << 8) | message[index + 1];
@@ -243,29 +311,33 @@ uint16_t Tonex::parseValue(const std::vector<uint8_t> &message, size_t &index)
         value = message[index];
         index++;
     }
-    return value;
+    return true;
 }
 
-std::tuple<Status, Message *> Tonex::parse(const std::vector<uint8_t> &message)
+std::tuple<Status, std::unique_ptr<Message>> Tonex::parse(const std::vector<uint8_t> &message)
 {
     auto [status, unframed] = hdlc::removeFraming(message);
     if (status != hdlc::Status::OK)
     {
-        return {Status::InvalidMessage, {}};
+        return {Status::InvalidMessage, nullptr};
     }
     if (unframed.size() < 5)
     {
         ESP_LOGE(TAG, "Message too short");
-        return {Status::InvalidMessage, {}};
+        return {Status::InvalidMessage, nullptr};
     }
     if (unframed[0] != 0xb9 || unframed[1] != 0x03)
     {
         ESP_LOGE(TAG, "Invalid header");
-        return {Status::InvalidMessage, {}};
+        return {Status::InvalidMessage, nullptr};
     }
     Header header;
     size_t index = 2;
-    auto type = parseValue(unframed, index);
+    uint16_t type;
+    if (!parseValue(unframed, index, type))
+    {
+        return {Status::InvalidMessage, nullptr};
+    }
     switch (type)
     {
     case 0x0306:
@@ -278,41 +350,48 @@ std::tuple<Status, Message *> Tonex::parse(const std::vector<uint8_t> &message)
         header.type = Type::Unknown;
         break;
     };
-    header.size = parseValue(unframed, index);
-    header.unknown = parseValue(unframed, index);
+    if (!parseValue(unframed, index, header.size) || !parseValue(unframed, index, header.unknown))
+    {
+        return {Status::InvalidMessage, nullptr};
+    }
     ESP_LOGI(TAG, "Structure ID: %d", header.type);
     ESP_LOGI(TAG, "Size: %d", header.size);
 
     if (unframed.size() - index != header.size)
     {
         ESP_LOGE(TAG, "Invalid message size");
-        return {Status::InvalidMessage, {}};
+        return {Status::InvalidMessage, nullptr};
     }
 
     switch (header.type)
     {
     case Type::Hello:
     {
-        auto msg = new Message();
+        auto msg = std::make_unique<Message>();
         msg->header = header;
-        return {Status::OK, msg};
+        return {Status::OK, std::move(msg)};
     }
     case Type::StateUpdate:
         return parseState(unframed, index);
     default:
     {
         ESP_LOGI(TAG, "Unknown structure. Skipping.");
-        auto msg = new Message();
+        auto msg = std::make_unique<Message>();
         msg->header = header;
-        return {Status::OK, msg};
+        return {Status::OK, std::move(msg)};
     }
     };
 }
 
-std::tuple<Status, State *> Tonex::parseState(const std::vector<uint8_t> &unframed, size_t &index)
+std::tuple<Status, std::unique_ptr<State>> Tonex::parseState(const std::vector<uint8_t> &unframed, size_t &index)
 {
     static const char slotName[] ={'A', 'B', 'C'};
-    auto state = new State();
+    if (index > unframed.size() || unframed.size() - index < STATE_MIN_SIZE)
+    {
+        ESP_LOGW(TAG, "State message too short");
+        return {Status::InvalidMessage, nullptr};
+    }
+    auto state = std::make_unique<State>();
     state->header.type = Type::StateUpdate;
     std::vector<uint8_t> raw(unframed.begin() + index, unframed.end());
     state->raw = raw;
@@ -323,9 +402,14 @@ std::tuple<Status, State *> Tonex::parseState(const std::vector<uint8_t> &unfram
     index += 2;
     state->slotCPreset = unframed[index];
     index += 3;
+    if (unframed[index] > Slot::C)
+    {
+        ESP_LOGW(TAG, "Invalid current slot: %d", unframed[index]);
+        return {Status::InvalidMessage, nullptr};
+    }
     state->currentSlot = static_cast<Slot>(unframed[index]);
     ESP_LOGI(TAG, "Current slot: %c", slotName[static_cast<int>(state->currentSlot)]);
     ESP_LOGI(TAG, "Presets: A: %d, B: %d, C: %d", state->slotAPreset, state->slotBPreset, state->slotCPreset);
     initialized = true;
-    return {Status::OK, state};
+    return {Status::OK, std::move(state)};
 }
