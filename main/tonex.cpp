@@ -37,23 +37,65 @@ static const char *TAG = "TONEX_CONTROLLER_TONEX";
 // -18 slot A preset, -16 slot B preset, -14 slot C preset, -11 current slot.
 static const size_t STATE_MIN_SIZE = 18;
 
+static const int HANDSHAKE_ATTEMPTS = 3;
+static const uint32_t HANDSHAKE_TIMEOUT_MS = 2000;
+
+// Polls until connectionState reaches at least `target`. Returns false on timeout or unplug.
+bool Tonex::waitForConnectionState(ConnectionState target, uint32_t timeoutMs)
+{
+    for (uint32_t waited = 0; waited < timeoutMs; waited += 100)
+    {
+        if (!usb->isConnected() || connectionState == ConnectionState::Disconnected)
+        {
+            return false;
+        }
+        if (connectionState >= target)
+        {
+            return true;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    return connectionState >= target;
+}
+
 void Tonex::onConnection()
 {
     ESP_LOGI(TAG, "Connected");
-    connectionState = ConnectionState::Connected;
-    hello();
-    while (connectionState != ConnectionState::Helloed)
+    for (int attempt = 1; attempt <= HANDSHAKE_ATTEMPTS; attempt++)
     {
-        vTaskDelay(pdMS_TO_TICKS(100));
+        if (!usb->isConnected())
+        {
+            break;
+        }
+        connectionState = ConnectionState::Connected;
+        hello();
+        if (!waitForConnectionState(ConnectionState::Helloed, HANDSHAKE_TIMEOUT_MS))
+        {
+            ESP_LOGW(TAG, "Hello timed out (attempt %d/%d)", attempt, HANDSHAKE_ATTEMPTS);
+            continue;
+        }
+        ESP_LOGI(TAG, "Helloed");
+        requestState();
+        if (!waitForConnectionState(ConnectionState::StateInitialized, HANDSHAKE_TIMEOUT_MS))
+        {
+            ESP_LOGW(TAG, "State request timed out (attempt %d/%d)", attempt, HANDSHAKE_ATTEMPTS);
+            continue;
+        }
+        ESP_LOGI(TAG, "Initialized");
+        return;
     }
-    ESP_LOGI(TAG, "Helloed");
-    requestState();
-    while (connectionState != ConnectionState::StateInitialized)
+    // Give up; usb_host_task goes back to waiting for the disconnect. A replug retries.
+    ESP_LOGE(TAG, "Handshake failed, pedal not initialized");
+    if (!usb->isConnected())
     {
-        ESP_LOGI(TAG, "State: %d", static_cast<int>(connectionState));
-        vTaskDelay(pdMS_TO_TICKS(100));
+        connectionState = ConnectionState::Disconnected;
     }
-    ESP_LOGI(TAG, "Initialized");
+}
+
+void Tonex::onDisconnection()
+{
+    ESP_LOGI(TAG, "Disconnected");
+    connectionState = ConnectionState::Disconnected;
 }
 
 void Tonex::init()
@@ -62,6 +104,7 @@ void Tonex::init()
     xSemaphoreGive(semaphore);
     usb = USB::init(TONEX_ONE_USB_DEVICE_VID, TONEX_ONE_USB_DEVICE_PID, std::bind(&Tonex::handleMessage, this, std::placeholders::_1));
     usb->setConnectionCallback(std::bind(&Tonex::onConnection, this));
+    usb->setDisconnectionCallback(std::bind(&Tonex::onDisconnection, this));
 }
 
 void Tonex::requestState()
